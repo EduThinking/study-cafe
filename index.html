@@ -21,9 +21,10 @@
   <!-- 왼쪽: 카페 맵 -->
   <main id="stage">
     <canvas id="game"></canvas>
+    <div id="zoom" class="hidden"><button type="button" id="zIn" title="확대">＋</button><span id="zLabel">100%</span><button type="button" id="zOut" title="축소">－</button><button type="button" id="zFit" title="전체 보기">전체</button></div>
     <div id="hbar" class="hidden"><div id="hthumb"></div></div>
     <div id="hint" class="hidden"></div>
-    <div id="help" class="hidden">이동: 맵 클릭 또는 방향키·WASD · 화면 둘러보기: 드래그·휠·아래 스크롤바 · 앉기/일어나기: E</div>
+    <div id="help" class="hidden">이동: 맵 클릭 또는 방향키·WASD · 둘러보기: 드래그·휠 · 확대/축소: Ctrl+휠 · 앉기/일어나기: E</div>
   </main>
 
   <!-- 오른쪽: 참가자 + 채팅 -->

@@ -58,6 +58,10 @@ button.primary:hover{background:#5d74dc}
 #vbtns{display:flex;gap:6px;padding:8px 12px 0}
 #vbtns button{flex:1;padding:8px 0;font-size:13px;background:#322b26;border-color:#3f362f;color:#f1ebe3}
 #vbtns button.on{background:#7087EC;border-color:#7087EC;color:#fff}
+#zoom{position:absolute;left:12px;top:12px;display:flex;flex-direction:column;align-items:center;gap:4px;background:rgba(0,0,0,.55);padding:6px;border-radius:12px;color:#fff;user-select:none}
+#zoom button{width:40px;height:36px;padding:0;font-size:18px;background:#fff;border:0;border-radius:8px}
+#zoom #zFit{font-size:12px}
+#zLabel{font-size:11px;font-variant-numeric:tabular-nums}
 #hbar{position:absolute;left:0;right:0;bottom:0;height:12px;background:rgba(0,0,0,.35);touch-action:none}
 #hthumb{position:absolute;top:2px;bottom:2px;border-radius:6px;background:rgba(255,255,255,.55);cursor:grab}
 #hthumb:hover{background:rgba(255,255,255,.8)}

@@ -495,6 +495,7 @@ let dpr = 1;
 const resize = () => {
   dpr = Math.min(3, window.devicePixelRatio || 1);
   cv.width = Math.round($('#stage').clientWidth * dpr); cv.height = Math.round($('#stage').clientHeight * dpr);
+  if (running) setZoom(Z);
 };
 addEventListener('resize', resize);
 
@@ -509,7 +510,8 @@ $('#enter').onclick = async () => {
   if (!online) { const d = store.get(n, p) || { sessions: [] }; d.look = me.look; store.set(n, p, d); }
   buildBg(); buildGrid();
   $('#entry').classList.add('hidden'); $('#side').classList.remove('hidden'); $('#help').classList.remove('hidden');
-  resize();
+  resize(); $('#zoom').classList.remove('hidden');
+  setZoom(cv.clientWidth < 700 ? .6 : 1);   // 좁은 화면은 조금 축소해서 시작
   running = true; last = performance.now(); requestAnimationFrame(loop);
   setInterval(updateHud, 500); updateHud();
   addMsg({ sys: `${n}님이 입장했습니다.` });
@@ -534,26 +536,45 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => keys[e.code] = false);
 // 화면 둘러보기: 드래그, 마우스 휠(Shift+휠은 좌우), 아래 스크롤바. 짧게 누르면 그 자리로 이동.
 const pan = { x: 0, y: 0 }, camS = { x: 0, y: 0, init: false };
-let drag = null;
-cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y, moved: false, id: e.pointerId }; try { cv.setPointerCapture(e.pointerId); } catch { } });
+let drag = null, Z = 1, pinch = null;
+const pts = new Map();
+const fitZoom = () => Math.max(.3, Math.min(1, cv.clientWidth / (W * T), cv.clientHeight / (H * T)));   // 맵 전체가 보이는 배율
+function setZoom(z) { Z = Math.max(fitZoom(), Math.min(2, z)); $('#zLabel').textContent = Math.round(Z * 100) + '%'; }
+$('#zIn').onclick = () => setZoom(Z * 1.25);
+$('#zOut').onclick = () => setZoom(Z / 1.25);
+$('#zFit').onclick = () => setZoom(0);
+const pinchDist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+cv.addEventListener('pointerdown', e => {
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); try { cv.setPointerCapture(e.pointerId); } catch { }
+  if (pts.size === 1) drag = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y, moved: false, id: e.pointerId };
+  else if (pts.size === 2) { pinch = { d: pinchDist() || 1, z: Z }; drag = null; }   // 두 손가락: 확대·축소
+});
 cv.addEventListener('pointermove', e => {
+  if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && pts.size >= 2) return setZoom(pinch.z * pinchDist() / pinch.d);
   if (!drag || e.pointerId !== drag.id) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (!drag.moved && Math.hypot(dx, dy) < 8) return;
-  drag.moved = true; pan.x = drag.px - dx; pan.y = drag.py - dy;
+  drag.moved = true; pan.x = drag.px - dx / Z; pan.y = drag.py - dy / Z;
 });
-cv.addEventListener('pointerup', e => { const d = drag; drag = null; if (d && !d.moved) onPoint(e); });
-cv.addEventListener('pointercancel', () => drag = null);
+const endPoint = (e, click) => {
+  pts.delete(e.pointerId);
+  if (pinch) { if (pts.size < 2) pinch = null; drag = null; return; }
+  const d = drag; drag = null; if (click && d && !d.moved) onPoint(e);
+};
+cv.addEventListener('pointerup', e => endPoint(e, true));
+cv.addEventListener('pointercancel', e => endPoint(e, false));
 $('#stage').addEventListener('wheel', e => {
   if (!running) return; e.preventDefault();
-  if (e.shiftKey) pan.x += e.deltaY + e.deltaX; else { pan.x += e.deltaX; pan.y += e.deltaY; }
+  if (e.ctrlKey || e.metaKey) setZoom(Z * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+  else if (e.shiftKey) pan.x += (e.deltaY + e.deltaX) / Z; else { pan.x += e.deltaX / Z; pan.y += e.deltaY / Z; }
 }, { passive: false });
 {
   let bd = null; const bar = $('#hbar'), th = $('#hthumb'), ww = W * T;
   th.addEventListener('pointerdown', e => { bd = { x: e.clientX, px: pan.x }; th.setPointerCapture(e.pointerId); e.stopPropagation(); });
   th.addEventListener('pointermove', e => { if (bd) pan.x = bd.px + (e.clientX - bd.x) * ww / bar.clientWidth; });
   th.addEventListener('pointerup', () => bd = null);
-  bar.addEventListener('pointerdown', e => { if (e.target === bar) pan.x += (e.clientX - bar.getBoundingClientRect().left) / bar.clientWidth * ww - (camS.x + bar.clientWidth / 2); });
+  bar.addEventListener('pointerdown', e => { if (e.target === bar) pan.x += (e.clientX - bar.getBoundingClientRect().left) / bar.clientWidth * ww - (camS.x + bar.clientWidth / Z / 2); });
 }
 $('#hint').onclick = () => { if (running) interact(); };
 
@@ -627,7 +648,7 @@ function arrive() {
 function onPoint(e) {
   if (document.activeElement) document.activeElement.blur();
   if (!running || me.sit || !$('#kiosk').classList.contains('hidden')) return;
-  const r = cv.getBoundingClientRect(), wx = e.clientX - r.left + cam.x, wy = e.clientY - r.top + cam.y;
+  const r = cv.getBoundingClientRect(), wx = (e.clientX - r.left) / Z + cam.x, wy = (e.clientY - r.top) / Z + cam.y;
   let goal = null, tx = wx, ty = wy;
   const s = seats.find(s => !s.by && Math.hypot(s.x - wx, s.y - wy) < 28);
   if (s) { goal = { seat: s }; tx = s.x; ty = s.y; }
@@ -679,8 +700,8 @@ function update(dt) {
 }
 
 function render(t) {
-  const vw = cv.width / dpr, vh = cv.height / dpr, ww = W * T, wh = H * T;
-  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const sc = dpr * Z, vw = cv.width / sc, vh = cv.height / sc, ww = W * T, wh = H * T;
+  c.setTransform(sc, 0, 0, sc, 0, 0);
   const fx = vw > ww ? (ww - vw) / 2 : Math.max(0, Math.min(ww - vw, me.x - vw / 2));
   const fy = vh > wh ? (wh - vh) / 2 : Math.max(0, Math.min(wh - vh, me.y - vh / 2));
   pan.x = vw >= ww ? 0 : Math.max(-fx, Math.min(ww - vw - fx, pan.x));
@@ -688,10 +709,10 @@ function render(t) {
   const ck = camS.init && !drag ? .3 : 1;
   camS.x += (fx + pan.x - camS.x) * ck; camS.y += (fy + pan.y - camS.y) * ck; camS.init = true;
   const cx = camS.x, cy = camS.y;
-  $('#hbar').classList.toggle('hidden', vw >= ww);
-  if (vw < ww) { $('#hthumb').style.width = vw / ww * 100 + '%'; $('#hthumb').style.left = cx / ww * 100 + '%'; }
+  $('#hbar').classList.toggle('hidden', vw >= ww - 2);
+  if (vw < ww - 2) { $('#hthumb').style.width = vw / ww * 100 + '%'; $('#hthumb').style.left = cx / ww * 100 + '%'; }
   c.fillStyle = '#1f1a17'; c.fillRect(0, 0, vw, vh);
-  cam.x = Math.round(cx * dpr) / dpr; cam.y = Math.round(cy * dpr) / dpr;
+  cam.x = Math.round(cx * sc) / sc; cam.y = Math.round(cy * sc) / sc;
   c.save(); c.translate(-cam.x, -cam.y); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
   c.drawImage(bg, 0, 0, ww, wh);
   if (!me.sit && near && near.seat) {
@@ -954,7 +975,7 @@ $('#leave').onclick = async () => {
     const t = new Date(s.t);
     return `<li><span>${t.getMonth() + 1}월 ${t.getDate()}일 ${p2(t.getHours())}:${p2(t.getMinutes())}</span><b>${fmt(s.ms)}</b></li>`;
   }).join('') || '<li>아직 기록이 없어요.</li>';
-  ['kiosk', 'help', 'hint'].forEach(i => $('#' + i).classList.add('hidden'));
+  ['kiosk', 'help', 'hint', 'zoom', 'hbar'].forEach(i => $('#' + i).classList.add('hidden'));
   $('#record').classList.remove('hidden');
 };
 $('#again').onclick = () => location.reload();
