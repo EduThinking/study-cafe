@@ -507,7 +507,7 @@ $('#enter').onclick = async () => {
   $('#enter').disabled = false;
   me = { nick: n, pin: p, look: { ...look }, x: 10 * T, y: 28.2 * T, dir: 'up', step: 0, anim: 0, sit: null, acc: 0, since: 0, emote: null };
   if (!online) { const d = store.get(n, p) || { sessions: [] }; d.look = me.look; store.set(n, p, d); }
-  buildBg();
+  buildBg(); buildGrid();
   $('#entry').classList.add('hidden'); $('#side').classList.remove('hidden'); $('#help').classList.remove('hidden');
   resize();
   running = true; last = performance.now(); requestAnimationFrame(loop);
@@ -532,12 +532,13 @@ addEventListener('keydown', e => {
   if (e.code.startsWith('Arrow')) e.preventDefault();
 });
 addEventListener('keyup', e => keys[e.code] = false);
-cv.addEventListener('mousedown', () => document.activeElement && document.activeElement.blur());
+cv.addEventListener('pointerdown', e => onPoint(e));
+$('#hint').onclick = () => { if (running) interact(); };
 
 function interact() {
   if (!$('#kiosk').classList.contains('hidden')) return;
   if (me.sit) {                       // 일어나기 → 스탠드 꺼짐
-    me.acc += Date.now() - me.since; me.sit.by = null; me.sit = null; me.dir = 'down';
+    me.acc += Date.now() - me.since; me.sit.by = null; me.sit = null; me.dir = 'down'; me.path = me.goal = null;
     for (let i = 0; i < 20 && hit(me.x, me.y); i++) me.y += 4;
     addMsg({ sys: `${me.nick}님이 자리에서 일어났습니다.` });
   } else if (near && near.seat) {     // 앉기 → 스탠드 켜짐
@@ -548,6 +549,71 @@ function interact() {
   }
   syncMe(); sendPos();
   updateHud(); syncVideo();
+}
+
+/* 클릭·터치 이동: 격자 길찾기 */
+const G = 20, GW = W * T / G, GH = H * T / G, cam = { x: 0, y: 0 };
+let grid = null, marker = null;
+const cellOk = (i, j) => i >= 0 && j >= 0 && i < GW && j < GH && grid[j * GW + i];
+function buildGrid() {
+  grid = new Uint8Array(GW * GH);
+  for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) grid[j * GW + i] = hit(i * G + G / 2, j * G + G / 2) ? 0 : 1;
+}
+function nearestCell(x, y) {
+  const ci = Math.max(0, Math.min(GW - 1, Math.floor(x / G))), cj = Math.max(0, Math.min(GH - 1, Math.floor(y / G)));
+  if (cellOk(ci, cj)) return [ci, cj];
+  for (let r = 1; r <= 14; r++) {
+    let best = null, bd = 1e9;
+    for (let j = cj - r; j <= cj + r; j++) for (let i = ci - r; i <= ci + r; i++) {
+      if (Math.max(Math.abs(i - ci), Math.abs(j - cj)) !== r || !cellOk(i, j)) continue;
+      const d = Math.hypot(i * G + G / 2 - x, j * G + G / 2 - y); if (d < bd) { bd = d; best = [i, j]; }
+    }
+    if (best) return best;
+  }
+  return null;
+}
+function los(a, b) {
+  const d = Math.hypot(b.x - a.x, b.y - a.y), n = Math.ceil(d / 5);
+  for (let k = 1; k <= n; k++) if (hit(a.x + (b.x - a.x) * k / n, a.y + (b.y - a.y) * k / n)) return false;
+  return true;
+}
+function findPath(sx, sy, tx, ty) {
+  const s = nearestCell(sx, sy), t = nearestCell(tx, ty); if (!s || !t) return null;
+  const prev = new Int32Array(GW * GH).fill(-1), si = s[1] * GW + s[0], ti = t[1] * GW + t[0], q = [si]; prev[si] = si;
+  for (let h = 0; h < q.length && prev[ti] < 0; h++) {
+    const c = q[h], i = c % GW, j = (c - i) / GW;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const ni = i + di, nj = j + dj, n = nj * GW + ni;
+      if (!cellOk(ni, nj) || prev[n] >= 0 || (di && dj && (!cellOk(i + di, j) || !cellOk(i, j + dj)))) continue;
+      prev[n] = c; q.push(n);
+    }
+  }
+  if (prev[ti] < 0) return null;
+  const pts = [];
+  for (let c = ti; c !== si; c = prev[c]) pts.push({ x: (c % GW) * G + G / 2, y: Math.floor(c / GW) * G + G / 2 });
+  pts.push({ x: s[0] * G + G / 2, y: s[1] * G + G / 2 }, { x: sx, y: sy }); pts.reverse();
+  if (!hit(tx, ty) && los(pts[pts.length - 1], { x: tx, y: ty })) pts.push({ x: tx, y: ty });
+  const out = [];   // 꺾이는 곳만 남겨 자연스럽게 걷기
+  for (let i = 0; i < pts.length - 1;) { let j = pts.length - 1; while (j > i + 1 && !los(pts[i], pts[j])) j--; out.push(pts[j]); i = j; }
+  return out;
+}
+function arrive() {
+  const g = me.goal; me.goal = me.path = null;
+  if (g && g.seat && !g.seat.by) { near = { seat: g.seat }; interact(); }
+  else if (g && g.kiosk) { near = { kiosk: true }; interact(); }
+}
+function onPoint(e) {
+  if (document.activeElement) document.activeElement.blur();
+  if (!running || me.sit || !$('#kiosk').classList.contains('hidden')) return;
+  const r = cv.getBoundingClientRect(), wx = e.clientX - r.left + cam.x, wy = e.clientY - r.top + cam.y;
+  let goal = null, tx = wx, ty = wy;
+  const s = seats.find(s => !s.by && Math.hypot(s.x - wx, s.y - wy) < 28);
+  if (s) { goal = { seat: s }; tx = s.x; ty = s.y; }
+  else if (Math.abs(KIOSK.x - wx) < 34 && wy > KIOSK.y - 70 && wy < KIOSK.y + 30) { goal = { kiosk: true }; tx = KIOSK.x; ty = KIOSK.y + T; }
+  const path = findPath(me.x, me.y, tx, ty);
+  if (!path || !path.length) return;
+  me.path = path; me.goal = goal;
+  const end = s || path[path.length - 1]; marker = { x: end.x, y: end.y, until: performance.now() + 700 };
 }
 
 let lastSent = 0, wasMoving = false;
@@ -564,15 +630,26 @@ function update(dt) {
   if (me.sit || !$('#kiosk').classList.contains('hidden')) return;
   const dx = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0);
   const dy = (keys.ArrowDown || keys.KeyS ? 1 : 0) - (keys.ArrowUp || keys.KeyW ? 1 : 0);
-  if (dx || dy) {
+  let moved = false, arrived = false;
+  if (dx || dy) {   // 키보드 이동 (클릭 이동은 취소)
+    me.path = me.goal = null;
     const k = 200 * dt / Math.hypot(dx, dy);
     if (!hit(me.x + dx * k, me.y)) me.x += dx * k;
     if (!hit(me.x, me.y + dy * k)) me.y += dy * k;
-    me.dir = dx ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+    me.dir = dx ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'); moved = true;
+  } else if (me.path && me.path.length) {   // 클릭한 곳으로 걸어가기
+    const p = me.path[0], ex = p.x - me.x, ey = p.y - me.y, d = Math.hypot(ex, ey), k = 200 * dt;
+    if (d <= k) { me.x = p.x; me.y = p.y; me.path.shift(); arrived = !me.path.length; }
+    else { me.x += ex / d * k; me.y += ey / d * k; }
+    if (d > 1) me.dir = Math.abs(ex) > Math.abs(ey) ? (ex > 0 ? 'right' : 'left') : (ey > 0 ? 'down' : 'up');
+    moved = true;
+  }
+  if (moved) {
     me.anim += dt; me.step = 1 + Math.floor(me.anim / .16) % 2;
     const now = performance.now(); wasMoving = true;
     if (now - lastSent > 110) { sendPos(); lastSent = now; }
   } else { me.step = 0; if (wasMoving) { sendPos(); wasMoving = false; } }
+  if (arrived) { arrive(); if (me.sit) return; }
   near = null; let best = 50;
   for (const s of seats) if (!s.by) { const d = Math.hypot(s.x - me.x, s.y - me.y); if (d < best) { best = d; near = { seat: s }; } }
   if (!near && Math.hypot(KIOSK.x - me.x, KIOSK.y - me.y) < 75) near = { kiosk: true };
@@ -584,10 +661,15 @@ function render(t) {
   const cx = vw > ww ? (ww - vw) / 2 : Math.max(0, Math.min(ww - vw, me.x - vw / 2));
   const cy = vh > wh ? (wh - vh) / 2 : Math.max(0, Math.min(wh - vh, me.y - vh / 2));
   c.fillStyle = '#1f1a17'; c.fillRect(0, 0, vw, vh);
-  c.save(); c.translate(-Math.round(cx * dpr) / dpr, -Math.round(cy * dpr) / dpr); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+  cam.x = Math.round(cx * dpr) / dpr; cam.y = Math.round(cy * dpr) / dpr;
+  c.save(); c.translate(-cam.x, -cam.y); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
   c.drawImage(bg, 0, 0, ww, wh);
   if (!me.sit && near && near.seat) {
     c.strokeStyle = '#FFD164'; c.lineWidth = 3; c.beginPath(); c.roundRect(near.seat.x - 17, near.seat.y - 17, 34, 34, 10); c.stroke();
+  }
+  if (marker && marker.until > t) {
+    const k = (marker.until - t) / 700;
+    c.strokeStyle = `rgba(255,209,100,${k})`; c.lineWidth = 3; c.beginPath(); c.arc(marker.x, marker.y, 6 + (1 - k) * 16, 0, 7); c.stroke();
   }
   const people = [...others.values()].map(o => ({ p: o, sit: o.seat != null && seats[o.seat] || null }));
   people.push({ p: me, sit: me.sit, mine: true });
@@ -624,7 +706,7 @@ function render(t) {
   c.textAlign = 'left';
   c.restore();
   const h = $('#hint');
-  const msg = me.sit ? 'E 키를 누르면 일어납니다' : near && near.seat ? 'E 키를 눌러 앉기' : near && near.kiosk ? 'E 키를 눌러 키오스크 사용' : '';
+  const msg = me.sit ? '일어나기 (E 키 또는 여기 클릭)' : near && near.seat ? '앉기 (E 키 또는 여기 클릭)' : near && near.kiosk ? '키오스크 사용 (E 키 또는 여기 클릭)' : '';
   h.textContent = msg; h.classList.toggle('hidden', !msg);
 }
 
