@@ -14,7 +14,7 @@ button.primary:hover{background:#5d74dc}
 #side h3{font-size:14px;padding:14px 16px 10px;display:flex;align-items:center;gap:6px}
 #count{font-weight:500;color:#a99f93;font-size:13px}
 
-#people{flex:0 0 38%;display:flex;flex-direction:column;min-height:0;border-bottom:1px solid #3a322c}
+#people{flex:0 1 34%;display:flex;flex-direction:column;min-height:0;border-bottom:1px solid #3a322c}
 #board{list-style:none;flex:1;overflow:auto;padding:0 10px}
 #board li{display:flex;align-items:center;gap:10px;padding:8px;border-radius:10px;font-size:14px}
 #board li.me{background:#322b26}
@@ -28,7 +28,7 @@ button.primary:hover{background:#5d74dc}
 
 #chat{flex:1;display:flex;flex-direction:column;min-height:0}
 #msgs{list-style:none;flex:1;overflow:auto;padding:0 14px;display:flex;flex-direction:column;gap:8px}
-#msgs li{font-size:14px;line-height:1.45;word-break:break-word}
+#msgs li{font-size:14px;line-height:1.45;word-break:break-word;white-space:pre-wrap}
 #msgs li b{display:block;font-size:12px;color:#a9b6f5;margin-bottom:2px}
 #msgs li span.t{font-weight:400;color:#7f766c;margin-left:6px}
 #msgs li.sys{font-size:12px;color:#8f867b;text-align:center}
@@ -37,13 +37,24 @@ button.primary:hover{background:#5d74dc}
 #emojis{display:flex;gap:4px;padding:8px 12px 0}
 #emojis button{flex:1;padding:6px 0;background:#322b26;border-color:#3f362f;font-size:17px}
 #emojis button:hover{background:#40372f}
-#chatForm{display:flex;gap:6px;padding:10px 12px 14px;align-items:center}
-#chatForm input[type=text],#chatInput{flex:1;min-width:0;font:inherit;padding:9px 10px;border-radius:10px;border:1px solid #3f362f;background:#1f1a17;color:#f1ebe3}
+#chatForm{display:flex;gap:6px;padding:10px 12px 14px;align-items:flex-end}
+#chatInput{flex:1;min-width:0;height:76px;resize:none;line-height:1.4;font:inherit;padding:9px 10px;border-radius:10px;border:1px solid #3f362f;background:#1f1a17;color:#f1ebe3}
 #chatInput:focus{outline:2px solid #7087EC;border-color:transparent}
 #chatForm button{padding:9px 12px}
 .clip{cursor:pointer;font-size:18px;padding:6px;border-radius:8px}
 .clip:hover{background:#322b26}
 
+#video{flex:none;border-bottom:1px solid #3a322c;padding-bottom:10px}
+#tiles{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 12px}
+.tile{position:relative;aspect-ratio:4/3;background:#15110f;border-radius:10px;overflow:hidden;border:1px solid #3f362f}
+.tile video{width:100%;height:100%;object-fit:cover;display:block}
+.tile.me video{transform:scaleX(-1)}
+.tile.novideo video{visibility:hidden}
+.tile.novideo::before{content:'📷 꺼짐';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#7f766c;font-size:12px}
+.tile span{position:absolute;left:6px;bottom:5px;font-size:11px;font-weight:600;background:rgba(0,0,0,.6);padding:2px 7px;border-radius:999px;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#vbtns{display:flex;gap:6px;padding:8px 12px 0}
+#vbtns button{flex:1;padding:8px 0;font-size:13px;background:#322b26;border-color:#3f362f;color:#f1ebe3}
+#vbtns button.on{background:#7087EC;border-color:#7087EC;color:#fff}
 #hint{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);background:#FFD164;color:#3a2f10;font-weight:700;padding:10px 18px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.3);white-space:nowrap}
 #help{position:absolute;left:16px;bottom:16px;background:rgba(0,0,0,.55);color:#fff;font-size:13px;padding:8px 12px;border-radius:8px}
 

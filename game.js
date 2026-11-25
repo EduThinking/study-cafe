@@ -295,8 +295,8 @@ deco.push(g => {
 });
 plant(17.4, 21.4); plant(1.6, 21.6);
 
-// 스터디룸 (유리방)
-for (const [x, z] of [[21, '스터디룸 A'], [27.5, '스터디룸 B']]) {
+// 화상회의룸 (유리방): 앉으면 같은 방 사람끼리 카메라·마이크 연결
+for (const [x, z] of [[21, '화상회의룸 A'], [27.5, '화상회의룸 B']]) {
   S(x, 23, 3, 2);
   seat(x + .7, 22.35, 'down', z); seat(x + 2.3, 22.35, 'down', z); seat(x + .7, 25.65, 'up', z); seat(x + 2.3, 25.65, 'up', z);
   deco.push(g => {
@@ -425,7 +425,7 @@ function onSync() {
     s.by = o.nick; o.x = o.tx = s.x; o.y = o.ty = s.y; o.dir = s.dir;
   }
   if (me.sit) me.sit.by = me.nick;
-  ready = true; updateHud();
+  ready = true; updateHud(); syncVideo();
 }
 function joinRoom() {
   channel = sb.channel('cafe-main', { config: { broadcast: { self: false }, presence: { key: myId } } });
@@ -436,6 +436,7 @@ function joinRoom() {
       const o = others.get(p.id); if (!o || o.seat != null) return;
       o.tx = +p.x; o.ty = +p.y; o.dir = p.dir; if (Math.hypot(o.tx - o.x, o.ty - o.y) > 400) { o.x = o.tx; o.y = o.ty; }
     })
+    .on('broadcast', { event: 'rtc' }, ({ payload }) => onRtc(payload))
     .on('broadcast', { event: 'chat' }, ({ payload: m }) => {
       addMsg(m);
       const o = others.get(m.id); if (o && m.big) o.emote = { e: String(m.text).slice(0, 4), until: performance.now() + 3000 };
@@ -525,7 +526,7 @@ const hit = (x, y) => solids.some(s => x - 10 < s.x + s.w && x + 10 > s.x && y -
 addEventListener('keydown', e => {
   if (!running) return;
   if (e.code === 'Escape' && !$('#kiosk').classList.contains('hidden')) { $('#kiosk').classList.add('hidden'); e.preventDefault(); return; }   // ESC로 키오스크 창 닫기
-  if (e.target.tagName === 'INPUT') { if (e.code === 'Escape') e.target.blur(); return; }
+  if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) { if (e.code === 'Escape') e.target.blur(); return; }
   keys[e.code] = true;
   if ((e.code === 'KeyE' || e.code === 'Space') && !e.repeat) { e.preventDefault(); interact(); }
   if (e.code.startsWith('Arrow')) e.preventDefault();
@@ -546,7 +547,7 @@ function interact() {
     $('#kioskTime').textContent = fmt(studied()); $('#kiosk').classList.remove('hidden');
   }
   syncMe(); sendPos();
-  updateHud();
+  updateHud(); syncVideo();
 }
 
 let lastSent = 0, wasMoving = false;
@@ -671,6 +672,9 @@ const say = m => { const msg = { id: myId, who: me.nick, ...m }; addMsg(msg); ca
   b.onclick = () => { say({ text: e, big: true }); me.emote = { e, until: performance.now() + 3000 }; };
   $('#emojis').appendChild(b);
 });
+$('#chatInput').addEventListener('keydown', e => {   // Enter 전송, Shift+Enter 줄바꿈 (한글 조합 중에는 무시)
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#chatForm').requestSubmit(); }
+});
 $('#chatForm').onsubmit = e => {
   e.preventDefault();
   const v = $('#chatInput').value.trim(); if (!v || !me) return;
@@ -688,6 +692,117 @@ $('#file').onchange = async e => {
   say({ file: { name: f.name, size: f.size, url: sb.storage.from('cafe-files').getPublicUrl(path).data.publicUrl } });
 };
 
+/* ───────── 화상회의룸 (WebRTC: 같은 방에 앉은 사람끼리 직접 연결) ───────── */
+const peers = new Map();
+let localStream = null, myRoom = null;
+const ICE = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }] };
+const roomOf = s => s && s.zone.startsWith('화상회의룸') ? s.zone : null;
+const mateIds = () => [...others.values()].filter(o => o.seat != null && seats[o.seat] && seats[o.seat].zone === myRoom).map(o => o.id);
+
+function tile(id, name) {
+  let el = document.getElementById('tile-' + id);
+  if (!el) {
+    el = document.createElement('div'); el.className = 'tile novideo'; el.id = 'tile-' + id;
+    const v = document.createElement('video'); v.autoplay = true; v.playsInline = true;
+    if (id === 'me') { v.muted = true; el.classList.add('me'); }
+    el.append(v, document.createElement('span')); $('#tiles').appendChild(el);
+  }
+  el.querySelector('span').textContent = name; return el;
+}
+function refreshTile(id, stream) {
+  const el = document.getElementById('tile-' + id); if (!el) return;
+  const v = el.querySelector('video');
+  if (stream && v.srcObject !== stream) { v.srcObject = stream; v.play && v.play().catch(() => { }); }
+  const s = v.srcObject;
+  el.classList.toggle('novideo', !(s && s.getVideoTracks().some(t => t.readyState === 'live' && !t.muted)));
+}
+function peer(id) {
+  let pc = peers.get(id); if (pc) return pc;
+  pc = new RTCPeerConnection(ICE); pc.polite = myId < id; pc.born = Date.now(); peers.set(id, pc);
+  pc.onnegotiationneeded = async () => {
+    try { pc.makingOffer = true; await pc.setLocalDescription(); cast('rtc', { from: myId, to: id, desc: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } }); }
+    catch (e) { console.warn(e); } finally { pc.makingOffer = false; }
+  };
+  pc.onicecandidate = ({ candidate }) => { if (candidate) cast('rtc', { from: myId, to: id, cand: candidate.toJSON() }); };
+  pc.ontrack = ({ track, streams }) => {
+    const st = streams[0] || (pc.rs = pc.rs || new MediaStream()); if (!streams[0]) st.addTrack(track);
+    track.onunmute = track.onmute = track.onended = () => refreshTile(id);
+    refreshTile(id, st);
+  };
+  pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === 'failed') pc.restartIce(); };
+  if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  return pc;
+}
+function closePeer(id) {
+  const pc = peers.get(id); if (pc) { pc.close(); peers.delete(id); }
+  const el = document.getElementById('tile-' + id); if (el) el.remove();
+}
+async function onRtc({ from, to, desc, cand }) {
+  if (to !== myId || !myRoom || !others.has(from)) return;
+  const pc = peer(from);
+  try {
+    if (desc) {
+      const collision = desc.type === 'offer' && (pc.makingOffer || pc.signalingState !== 'stable');
+      pc.ignoreOffer = !pc.polite && collision; if (pc.ignoreOffer) return;
+      await pc.setRemoteDescription(desc);
+      if (desc.type === 'offer') { await pc.setLocalDescription(); cast('rtc', { from: myId, to: from, desc: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } }); }
+    } else if (cand) {
+      try { await pc.addIceCandidate(cand); } catch (e) { if (!pc.ignoreOffer) throw e; }
+    }
+  } catch (e) { console.warn('rtc', e); }
+}
+function setVideoBtns() {
+  const cam = !!(localStream && localStream.getVideoTracks().length), mic = !!(localStream && localStream.getAudioTracks().length);
+  $('#camBtn').textContent = cam ? '🎥 카메라 끄기' : '🎥 카메라 켜기'; $('#camBtn').classList.toggle('on', cam);
+  $('#micBtn').textContent = mic ? '🎤 마이크 끄기' : '🎤 마이크 켜기'; $('#micBtn').classList.toggle('on', mic);
+}
+function leaveVideo() {
+  for (const id of [...peers.keys()]) closePeer(id);
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  $('#tiles').innerHTML = ''; $('#video').classList.add('hidden'); setVideoBtns();
+}
+function syncVideo() {
+  const room = online && me ? roomOf(me.sit) : null;
+  if (room !== myRoom) {
+    leaveVideo(); myRoom = room;
+    if (room) {
+      $('#video').classList.remove('hidden'); $('#roomName').textContent = room; tile('me', `${me.nick} (나)`);
+      addMsg({ sys: `${room}입니다. 오른쪽 위에서 카메라와 마이크를 켜면 같은 방 사람과 대화할 수 있어요.` });
+    }
+  }
+  if (!myRoom) return;
+  const mates = new Set(mateIds());
+  for (const id of mates) { tile(id, others.get(id).nick); if (localStream && localStream.getTracks().length) peer(id); }
+  for (const [id, pc] of [...peers]) if (!mates.has(id) && Date.now() - pc.born > 5000) closePeer(id);
+  document.querySelectorAll('#tiles .tile').forEach(el => { const id = el.id.slice(5); if (id !== 'me' && !mates.has(id) && !peers.has(id)) el.remove(); });
+}
+async function toggleMedia(kind) {
+  if (!myRoom) return;
+  localStream = localStream || new MediaStream();
+  const cur = (kind === 'video' ? localStream.getVideoTracks() : localStream.getAudioTracks())[0];
+  if (cur) {   // 끄기: 장치도 함께 꺼짐
+    cur.stop(); localStream.removeTrack(cur);
+    for (const pc of peers.values()) { const s = pc.getSenders().find(x => x.track === cur); if (s) pc.removeTrack(s); }
+  } else {
+    let ms;
+    try {
+      ms = await navigator.mediaDevices.getUserMedia(kind === 'video'
+        ? { video: { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 15 } } }
+        : { audio: { echoCancellation: true, noiseSuppression: true } });
+    } catch (e) {
+      return addMsg({ sys: `${kind === 'video' ? '카메라' : '마이크'}를 켤 수 없어요. 브라우저 주소창의 권한 설정을 확인해 주세요.` });
+    }
+    const tr = ms.getTracks()[0];
+    if (!myRoom) return tr.stop();
+    for (const pc of peers.values()) pc.addTrack(tr, localStream);
+    localStream.addTrack(tr);
+    for (const id of mateIds()) peer(id);
+  }
+  refreshTile('me', localStream); setVideoBtns();
+}
+$('#camBtn').onclick = () => toggleMedia('video');
+$('#micBtn').onclick = () => toggleMedia('audio');
+
 /* ───────── 퇴장과 기록 ───────── */
 $('#stay').onclick = () => $('#kiosk').classList.add('hidden');
 $('#leave').onclick = async () => {
@@ -701,6 +816,7 @@ $('#leave').onclick = async () => {
     if (ms >= 1000) d.sessions.push({ t: now, ms });
     store.set(me.nick, me.pin, d);
   }
+  leaveVideo(); myRoom = null;
   if (channel) { sb.removeChannel(channel); channel = null; }
   running = false;
   const day0 = new Date(); day0.setHours(0, 0, 0, 0);

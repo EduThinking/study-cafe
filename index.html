@@ -13,11 +13,19 @@
   <main id="stage">
     <canvas id="game"></canvas>
     <div id="hint" class="hidden"></div>
-    <div id="help" class="hidden">이동: 방향키 또는 WASD · 앉기/일어나기/키오스크: E</div>
+    <div id="help" class="hidden">이동: 방향키 또는 WASD · 앉기/일어나기/키오스크: E · 창 닫기: ESC</div>
   </main>
 
   <!-- 오른쪽: 참가자 + 채팅 -->
   <aside id="side" class="hidden">
+    <section id="video" class="hidden">
+      <h3>📹 <span id="roomName"></span></h3>
+      <div id="tiles"></div>
+      <div id="vbtns">
+        <button id="camBtn" type="button">🎥 카메라 켜기</button>
+        <button id="micBtn" type="button">🎤 마이크 켜기</button>
+      </div>
+    </section>
     <section id="people">
       <h3>참가자 <span id="count"></span></h3>
       <ul id="board"></ul>
@@ -29,7 +37,7 @@
       <div id="emojis"></div>
       <form id="chatForm">
         <label class="clip" title="파일 공유">📎<input type="file" id="file" hidden></label>
-        <input id="chatInput" placeholder="메시지 입력" maxlength="200" autocomplete="off">
+        <textarea id="chatInput" rows="3" placeholder="메시지 입력" title="Enter 전송, Shift+Enter 줄바꿈" maxlength="500"></textarea>
         <button class="primary">전송</button>
       </form>
     </section>
