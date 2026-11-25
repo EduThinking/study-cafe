@@ -759,12 +759,24 @@ $('#chatInput').addEventListener('keydown', e => {   // Enter 전송, Shift+Ente
 });
 $('#chatForm').onsubmit = e => {
   e.preventDefault();
-  const v = $('#chatInput').value.trim(); if (!v || !me) return;
-  say({ text: v }); $('#chatInput').value = '';
+  const v = $('#chatInput').value.trim(), f = pendingFile; if ((!v && !f) || !me) return;
+  if (v) say({ text: v });
+  $('#chatInput').value = ''; setAttach(null);
+  if (f) sendFile(f);
 };
-$('#file').onchange = async e => {
+// 파일은 고른 뒤 '전송'을 눌러야 올라감
+let pendingFile = null;
+function setAttach(f) {
+  pendingFile = f; $('#attach').classList.toggle('hidden', !f);
+  if (f) $('#attachName').textContent = `📎 ${f.name} (${Math.max(1, Math.round(f.size / 1024))}KB)`;
+}
+$('#attachX').onclick = () => setAttach(null);
+$('#file').onchange = e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f || !me) return;
   if (f.size > 10 * 1024 * 1024) return addMsg({ sys: '파일은 10MB까지 올릴 수 있어요.' });
+  setAttach(f); $('#chatInput').focus();
+};
+async function sendFile(f) {
   if (!online) return addMsg({ who: me.nick, file: { name: f.name, size: f.size, url: URL.createObjectURL(f) } });
   addMsg({ sys: `${f.name} 올리는 중…` });
   const ext = (f.name.match(/\.[A-Za-z0-9]{1,8}$/) || [''])[0];
@@ -772,7 +784,7 @@ $('#file').onchange = async e => {
   const { error } = await sb.storage.from('cafe-files').upload(path, f);
   if (error) return addMsg({ sys: `파일을 올리지 못했어요. (${error.message})` });
   say({ file: { name: f.name, size: f.size, url: sb.storage.from('cafe-files').getPublicUrl(path).data.publicUrl } });
-};
+}
 
 /* ───────── 화상회의룸 (WebRTC: 같은 방에 앉은 사람끼리 직접 연결) ───────── */
 const peers = new Map();

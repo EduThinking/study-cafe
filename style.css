@@ -37,6 +37,9 @@ button.primary:hover{background:#5d74dc}
 #emojis{display:flex;gap:4px;padding:8px 12px 0}
 #emojis button{flex:1;padding:6px 0;background:#322b26;border-color:#3f362f;font-size:17px}
 #emojis button:hover{background:#40372f}
+#attach{display:flex;align-items:center;gap:8px;margin:8px 12px 0;padding:7px 10px;background:#322b26;border:1px solid #3f362f;border-radius:10px;font-size:13px}
+#attachName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#attachX{padding:2px 8px;background:transparent;border:0;color:#a99f93}
 #chatForm{display:flex;gap:6px;padding:10px 12px 14px;align-items:flex-end}
 #chatInput{flex:1;min-width:0;height:76px;resize:none;line-height:1.4;font:inherit;padding:9px 10px;border-radius:10px;border:1px solid #3f362f;background:#1f1a17;color:#f1ebe3}
 #chatInput:focus{outline:2px solid #7087EC;border-color:transparent}
