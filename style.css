@@ -58,8 +58,11 @@ button.primary:hover{background:#5d74dc}
 #vbtns{display:flex;gap:6px;padding:8px 12px 0}
 #vbtns button{flex:1;padding:8px 0;font-size:13px;background:#322b26;border-color:#3f362f;color:#f1ebe3}
 #vbtns button.on{background:#7087EC;border-color:#7087EC;color:#fff}
+#hbar{position:absolute;left:0;right:0;bottom:0;height:12px;background:rgba(0,0,0,.35);touch-action:none}
+#hthumb{position:absolute;top:2px;bottom:2px;border-radius:6px;background:rgba(255,255,255,.55);cursor:grab}
+#hthumb:hover{background:rgba(255,255,255,.8)}
 #hint{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);background:#FFD164;color:#3a2f10;font-weight:700;padding:10px 18px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.3);white-space:nowrap;cursor:pointer;user-select:none}
-#help{position:absolute;left:16px;bottom:16px;background:rgba(0,0,0,.55);color:#fff;font-size:13px;padding:8px 12px;border-radius:8px}
+#help{position:absolute;left:16px;bottom:22px;background:rgba(0,0,0,.55);color:#fff;font-size:13px;padding:8px 12px;border-radius:8px}
 
 .overlay{position:fixed;inset:0;background:rgba(30,26,22,.72);display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;z-index:10}
 .card{background:#fffdf9;border-radius:20px;padding:32px;box-shadow:0 20px 60px rgba(0,0,0,.4)}

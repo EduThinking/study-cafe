@@ -532,7 +532,29 @@ addEventListener('keydown', e => {
   if (e.code.startsWith('Arrow')) e.preventDefault();
 });
 addEventListener('keyup', e => keys[e.code] = false);
-cv.addEventListener('pointerdown', e => onPoint(e));
+// 화면 둘러보기: 드래그, 마우스 휠(Shift+휠은 좌우), 아래 스크롤바. 짧게 누르면 그 자리로 이동.
+const pan = { x: 0, y: 0 }, camS = { x: 0, y: 0, init: false };
+let drag = null;
+cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y, moved: false, id: e.pointerId }; try { cv.setPointerCapture(e.pointerId); } catch { } });
+cv.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (!drag.moved && Math.hypot(dx, dy) < 8) return;
+  drag.moved = true; pan.x = drag.px - dx; pan.y = drag.py - dy;
+});
+cv.addEventListener('pointerup', e => { const d = drag; drag = null; if (d && !d.moved) onPoint(e); });
+cv.addEventListener('pointercancel', () => drag = null);
+$('#stage').addEventListener('wheel', e => {
+  if (!running) return; e.preventDefault();
+  if (e.shiftKey) pan.x += e.deltaY + e.deltaX; else { pan.x += e.deltaX; pan.y += e.deltaY; }
+}, { passive: false });
+{
+  let bd = null; const bar = $('#hbar'), th = $('#hthumb'), ww = W * T;
+  th.addEventListener('pointerdown', e => { bd = { x: e.clientX, px: pan.x }; th.setPointerCapture(e.pointerId); e.stopPropagation(); });
+  th.addEventListener('pointermove', e => { if (bd) pan.x = bd.px + (e.clientX - bd.x) * ww / bar.clientWidth; });
+  th.addEventListener('pointerup', () => bd = null);
+  bar.addEventListener('pointerdown', e => { if (e.target === bar) pan.x += (e.clientX - bar.getBoundingClientRect().left) / bar.clientWidth * ww - (camS.x + bar.clientWidth / 2); });
+}
 $('#hint').onclick = () => { if (running) interact(); };
 
 function interact() {
@@ -645,6 +667,7 @@ function update(dt) {
     moved = true;
   }
   if (moved) {
+    pan.x -= pan.x * Math.min(1, dt * 6); pan.y -= pan.y * Math.min(1, dt * 6);   // 걷기 시작하면 화면이 캐릭터를 다시 따라감
     me.anim += dt; me.step = 1 + Math.floor(me.anim / .16) % 2;
     const now = performance.now(); wasMoving = true;
     if (now - lastSent > 110) { sendPos(); lastSent = now; }
@@ -658,8 +681,15 @@ function update(dt) {
 function render(t) {
   const vw = cv.width / dpr, vh = cv.height / dpr, ww = W * T, wh = H * T;
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const cx = vw > ww ? (ww - vw) / 2 : Math.max(0, Math.min(ww - vw, me.x - vw / 2));
-  const cy = vh > wh ? (wh - vh) / 2 : Math.max(0, Math.min(wh - vh, me.y - vh / 2));
+  const fx = vw > ww ? (ww - vw) / 2 : Math.max(0, Math.min(ww - vw, me.x - vw / 2));
+  const fy = vh > wh ? (wh - vh) / 2 : Math.max(0, Math.min(wh - vh, me.y - vh / 2));
+  pan.x = vw >= ww ? 0 : Math.max(-fx, Math.min(ww - vw - fx, pan.x));
+  pan.y = vh >= wh ? 0 : Math.max(-fy, Math.min(wh - vh - fy, pan.y));
+  const ck = camS.init && !drag ? .3 : 1;
+  camS.x += (fx + pan.x - camS.x) * ck; camS.y += (fy + pan.y - camS.y) * ck; camS.init = true;
+  const cx = camS.x, cy = camS.y;
+  $('#hbar').classList.toggle('hidden', vw >= ww);
+  if (vw < ww) { $('#hthumb').style.width = vw / ww * 100 + '%'; $('#hthumb').style.left = cx / ww * 100 + '%'; }
   c.fillStyle = '#1f1a17'; c.fillRect(0, 0, vw, vh);
   cam.x = Math.round(cx * dpr) / dpr; cam.y = Math.round(cy * dpr) / dpr;
   c.save(); c.translate(-cam.x, -cam.y); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
