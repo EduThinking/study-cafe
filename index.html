@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>스터디카페</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <!-- 왼쪽: 카페 맵 -->
+  <main id="stage">
+    <canvas id="game"></canvas>
+    <div id="hint" class="hidden"></div>
+    <div id="help" class="hidden">이동: 방향키 또는 WASD · 앉기/일어나기/키오스크: E</div>
+  </main>
+
+  <!-- 오른쪽: 참가자 + 채팅 -->
+  <aside id="side" class="hidden">
+    <section id="people">
+      <h3>참가자 <span id="count"></span></h3>
+      <ul id="board"></ul>
+      <p id="seatinfo"></p>
+    </section>
+    <section id="chat">
+      <h3>채팅</h3>
+      <ul id="msgs"></ul>
+      <div id="emojis"></div>
+      <form id="chatForm">
+        <label class="clip" title="파일 공유">📎<input type="file" id="file" hidden></label>
+        <input id="chatInput" placeholder="메시지 입력" maxlength="200" autocomplete="off">
+        <button class="primary">전송</button>
+      </form>
+    </section>
+  </aside>
+</div>
+
+<!-- 입장 화면 -->
+<section id="entry" class="overlay">
+  <div class="card entry">
+    <div class="col">
+      <h1>스터디카페</h1>
+      <p class="sub">닉네임을 정하고 캐릭터를 꾸민 뒤 입장하세요.</p>
+      <label>닉네임
+        <input id="nick" maxlength="10" placeholder="최대 10자" autocomplete="off">
+      </label>
+      <label>전화번호 뒷자리 4자리
+        <input id="pin" maxlength="4" inputmode="numeric" placeholder="0000" autocomplete="off">
+      </label>
+      <p class="note">같은 닉네임과 번호로 들어오면 공부 기록이 이어집니다. 번호는 다른 사람에게 보이지 않아요.</p>
+      <p id="welcome" class="welcome"></p>
+      <button id="enter" class="primary">입장하기</button>
+      <p id="err" class="err"></p>
+    </div>
+    <div class="col center">
+      <canvas id="preview" width="160" height="200"></canvas>
+      <div id="parts"></div>
+      <button id="random">🎲 랜덤으로 뽑기</button>
+    </div>
+  </div>
+</section>
+
+<!-- 키오스크 -->
+<section id="kiosk" class="overlay hidden">
+  <div class="card small">
+    <h2>퇴장 키오스크</h2>
+    <p>이번에 공부한 시간</p>
+    <p id="kioskTime" class="big"></p>
+    <div class="row">
+      <button id="stay">계속 공부하기</button>
+      <button id="leave" class="primary">퇴장하기</button>
+    </div>
+  </div>
+</section>
+
+<!-- 퇴장 후 기록 -->
+<section id="record" class="overlay hidden">
+  <div class="card small">
+    <h2 id="recTitle"></h2>
+    <div id="recStats" class="stats"></div>
+    <h4>최근 기록</h4>
+    <ul id="recList"></ul>
+    <button id="again" class="primary">다시 입장하기</button>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
